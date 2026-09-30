@@ -73,6 +73,7 @@ public:
   Joint::Id GetJointId(RoadPoint const & rp) const { return m_roadIndex.GetJointId(rp); }
 
   bool IsRoad(uint32_t featureId) const { return m_roadIndex.IsRoad(featureId); }
+  RoadJointIds const * FindRoad(uint32_t featureId) const { return m_roadIndex.FindRoad(featureId); }
   RoadJointIds const & GetRoad(uint32_t featureId) const { return m_roadIndex.GetRoad(featureId); }
   RoadGeometry const & GetRoadGeometry(uint32_t featureId) const { return m_geometry->GetRoad(featureId); }
 
@@ -174,10 +175,21 @@ private:
   /// path until |u|.
   RouteWeight GetPenalties(EdgeEstimator::Purpose purpose, Segment const & u, Segment const & v,
                            std::optional<RouteWeight> const & prevWeight) const;
+  RouteWeight GetPenalties(EdgeEstimator::Purpose purpose, Segment const & u, Segment const & v,
+                           std::optional<RouteWeight> const & prevWeight,
+                           PenaltyData const & fromPenaltyData,
+                           PenaltyData const & toPenaltyData) const;
+
+  RouteWeight CalculateInternalEdgeWeight(EdgeEstimator::Purpose purpose, bool isOutgoing, Segment const & from,
+                                          Segment const & to,
+                                          std::optional<RouteWeight const> const & prevWeight,
+                                          RoadGeometry const & road) const;
 
   void GetSegmentCandidateForRoadPoint(RoadPoint const & rp, NumMwmId numMwmId, bool isOutgoing,
                                        SegmentListT & children) const;
   void GetSegmentCandidateForJoint(Segment const & parent, bool isOutgoing, SegmentListT & children) const;
+  void GetSegmentCandidatesAndLastPointsForJoint(Segment const & parent, bool isOutgoing,
+                                                 SegmentListT & children, PointIdListT & lastPoints) const;
   void ReconstructJointSegment(astar::VertexData<JointSegment, RouteWeight> const & parentVertexData,
                                Segment const & parent, SegmentListT const & firstChildren,
                                PointIdListT const & lastPointIds, bool isOutgoing, JointEdgeListT & jointEdges,

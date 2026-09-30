@@ -126,9 +126,10 @@ void IndexGraph::GetLastPointsForJoint(SegmentListT const & children, bool isOut
     //   where we should go for building JointSegment.
     // You can retrieve such result if bust possible options of |child.IsForward()| and |isOutgoing|.
     bool forward = child.IsForward() == isOutgoing;
-    if (IsRoad(child.GetFeatureId()))
+    auto const * roadJoints = FindRoad(child.GetFeatureId());
+    if (roadJoints)
     {
-      endPointId = GetRoad(child.GetFeatureId()).FindNeighbor(startPointId, forward, pointsNumber).second;
+      endPointId = roadJoints->FindNeighbor(startPointId, forward, pointsNumber).second;
     }
     else
     {
@@ -167,10 +168,8 @@ void IndexGraph::GetEdgeListImpl(astar::VertexData<JointSegment, RouteWeight> co
                                  Parents<JointSegment> const & parents) const
 {
   SegmentListT possibleChildren;
-  GetSegmentCandidateForJoint(parent, isOutgoing, possibleChildren);
-
   PointIdListT lastPoints;
-  GetLastPointsForJoint(possibleChildren, isOutgoing, lastPoints);
+  GetSegmentCandidatesAndLastPointsForJoint(parent, isOutgoing, possibleChildren, lastPoints);
 
   ReconstructJointSegment(parentVertexData, parent, possibleChildren, lastPoints, isOutgoing, edges, parentWeights,
                           parents);
@@ -252,17 +251,23 @@ void IndexGraph::GetNeighboringEdges(astar::VertexData<Segment, RouteWeight> con
                                      SegmentEdgeListT & edges, Parents<Segment> const & parents,
                                      bool useAccessConditional) const
 {
-  RoadGeometry const & road = GetRoadGeometry(rp.GetFeatureId());
+  bool bidirectional;
+  uint32_t pointsCount;
+  {
+    RoadGeometry const & road = GetRoadGeometry(rp.GetFeatureId());
 
-  if (!road.IsValid())
-    return;
+    if (!road.IsValid())
+      return;
 
-  if (useRoutingOptions && !road.SuitableForOptions(m_avoidRoutingOptions))
-    return;
+    if (useRoutingOptions && !road.SuitableForOptions(m_avoidRoutingOptions))
+      return;
 
-  bool const bidirectional = !road.IsOneWay();
+    bidirectional = !road.IsOneWay();
+    pointsCount = road.GetPointsCount();
+  }
+
   auto const & from = fromVertexData.m_vertex;
-  if ((isOutgoing || bidirectional) && rp.GetPointId() + 1 < road.GetPointsCount())
+  if ((isOutgoing || bidirectional) && rp.GetPointId() + 1 < pointsCount)
   {
     GetNeighboringEdge(fromVertexData, Segment(from.GetMwmId(), rp.GetFeatureId(), rp.GetPointId(), isOutgoing),
                        isOutgoing, edges, parents, useAccessConditional);
@@ -307,6 +312,47 @@ void IndexGraph::GetSegmentCandidateForJoint(Segment const & parent, bool isOutg
   { GetSegmentCandidateForRoadPoint(rp, parent.GetMwmId(), isOutgoing, children); });
 }
 
+void IndexGraph::GetSegmentCandidatesAndLastPointsForJoint(Segment const & parent, bool isOutgoing,
+                                                           SegmentListT & children, PointIdListT & lastPoints) const
+{
+  RoadPoint const roadPoint = parent.GetRoadPoint(isOutgoing);
+  Joint::Id const jointId = m_roadIndex.GetJointId(roadPoint);
+
+  if (jointId == Joint::kInvalidId)
+    return;
+
+  m_jointIndex.ForEachPoint(jointId, [&](RoadPoint const & rp)
+  {
+    RoadGeometry const & road = GetRoadGeometry(rp.GetFeatureId());
+    if (!road.IsValid())
+      return;
+
+    if (!road.SuitableForOptions(m_avoidRoutingOptions))
+      return;
+
+    bool const bidirectional = !road.IsOneWay();
+    auto const pointId = rp.GetPointId();
+    uint32_t const pointsNumber = road.GetPointsCount();
+    auto const * roadJoints = FindRoad(rp.GetFeatureId());
+
+    if ((isOutgoing || bidirectional) && pointId + 1 < pointsNumber)
+    {
+      children.emplace_back(parent.GetMwmId(), rp.GetFeatureId(), pointId, isOutgoing);
+      uint32_t const endPointId = roadJoints ? roadJoints->FindNeighbor(pointId, true, pointsNumber).second
+                                             : pointsNumber - 1;
+      lastPoints.push_back(endPointId);
+    }
+
+    if ((!isOutgoing || bidirectional) && pointId > 0)
+    {
+      children.emplace_back(parent.GetMwmId(), rp.GetFeatureId(), pointId - 1, !isOutgoing);
+      uint32_t const endPointId = roadJoints ? roadJoints->FindNeighbor(pointId, false, pointsNumber).second
+                                             : 0;
+      lastPoints.push_back(endPointId);
+    }
+  });
+}
+
 /// \brief Prolongs segments from |parent| to |firstChildren| directions in order to
 ///        create JointSegments.
 /// \param |firstChildren| - vector of neighbouring segments from parent.
@@ -323,8 +369,12 @@ void IndexGraph::ReconstructJointSegment(astar::VertexData<JointSegment, RouteWe
 {
   CHECK_EQUAL(firstChildren.size(), lastPointIds.size(), ());
 
+  if (firstChildren.empty())
+    return;
+
   auto const & weightTimeToParent = parentVertexData.m_realDistance;
   auto const & parentJoint = parentVertexData.m_vertex;
+
   for (size_t i = 0; i < firstChildren.size(); ++i)
   {
     auto const & firstChild = firstChildren[i];
@@ -381,22 +431,33 @@ void IndexGraph::ReconstructJointSegment(astar::VertexData<JointSegment, RouteWe
     Segment current = firstChild;
     Segment prev = parent;
 
-    do
-    {
-      RouteWeight const weight =
-          CalculateEdgeWeight(EdgeEstimator::Purpose::Weight, isOutgoing, prev, current, weightTimeToParent);
+    RouteWeight const firstWeight =
+        CalculateEdgeWeight(EdgeEstimator::Purpose::Weight, isOutgoing, prev, current, weightTimeToParent);
 
-      if (isOutgoing || prev != parent)
+    if (isOutgoing)
+      summaryWeight += firstWeight;
+
+    parentWeights.emplace_back(firstWeight);
+
+    prev = current;
+    current.Next(forward);
+    currentPointId = increment(currentPointId);
+
+    if (currentPointId != lastPointId)
+    {
+      auto const & childRoad = GetRoadGeometry(firstChild.GetFeatureId());
+      while (currentPointId != lastPointId)
+      {
+        RouteWeight const weight = CalculateInternalEdgeWeight(
+            EdgeEstimator::Purpose::Weight, isOutgoing, prev, current, weightTimeToParent, childRoad);
+
         summaryWeight += weight;
 
-      if (prev == parent)
-        parentWeights.emplace_back(weight);
-
-      prev = current;
-      current.Next(forward);
-      currentPointId = increment(currentPointId);
+        prev = current;
+        current.Next(forward);
+        currentPointId = increment(currentPointId);
+      }
     }
-    while (currentPointId != lastPointId);
 
     jointEdges.emplace_back(isOutgoing ? JointSegment(firstChild, prev) : JointSegment(prev, firstChild),
                             summaryWeight);
@@ -437,8 +498,16 @@ IndexGraph::PenaltyData IndexGraph::GetRoadPenaltyData(Segment const & segment) 
 RouteWeight IndexGraph::GetPenalties(EdgeEstimator::Purpose purpose, Segment const & u, Segment const & v,
                                      optional<RouteWeight> const & prevWeight) const
 {
-  auto const & fromPenaltyData = GetRoadPenaltyData(u);
-  auto const & toPenaltyData = GetRoadPenaltyData(v);
+  auto const fromPenaltyData = GetRoadPenaltyData(u);
+  auto const toPenaltyData = (u.GetFeatureId() == v.GetFeatureId()) ? fromPenaltyData : GetRoadPenaltyData(v);
+  return GetPenalties(purpose, u, v, prevWeight, fromPenaltyData, toPenaltyData);
+}
+
+RouteWeight IndexGraph::GetPenalties(EdgeEstimator::Purpose purpose, Segment const & u, Segment const & v,
+                                     optional<RouteWeight> const & prevWeight,
+                                     PenaltyData const & fromPenaltyData,
+                                     PenaltyData const & toPenaltyData) const
+{
   // Route crosses border of pass-through/non-pass-through area if |u| and |v| have different
   // pass through restrictions.
   int8_t const passThroughPenalty = fromPenaltyData.m_passThroughAllowed == toPenaltyData.m_passThroughAllowed ? 0 : 1;
@@ -517,10 +586,19 @@ bool IndexGraph::IsUTurnAndRestricted(Segment const & parent, Segment const & ch
 
   uint32_t const featureId = parent.GetFeatureId();
   uint32_t const turnPoint = parent.GetPointId(isOutgoing);
-  auto const & roadGeometry = GetRoadGeometry(featureId);
 
   RoadPoint const rp = parent.GetRoadPoint(isOutgoing);
-  if (m_roadIndex.GetJointId(rp) == Joint::kInvalidId && !roadGeometry.IsEndPointId(turnPoint))
+  bool const isJoint = m_roadIndex.GetJointId(rp) != Joint::kInvalidId;
+
+  bool isEndPoint;
+  uint32_t pointsCount;
+  {
+    auto const & roadGeometry = GetRoadGeometry(featureId);
+    isEndPoint = roadGeometry.IsEndPointId(turnPoint);
+    pointsCount = roadGeometry.GetPointsCount();
+  }
+
+  if (!isJoint && !isEndPoint)
     return true;
 
   auto const it = m_noUTurnRestrictions.find(featureId);
@@ -531,9 +609,8 @@ bool IndexGraph::IsUTurnAndRestricted(Segment const & parent, Segment const & ch
   if (uTurn.m_atTheBegin && turnPoint == 0)
     return true;
 
-  uint32_t const n = roadGeometry.GetPointsCount();
-  ASSERT_GREATER_OR_EQUAL(n, 1, ());
-  return uTurn.m_atTheEnd && turnPoint == n - 1;
+  ASSERT_GREATER_OR_EQUAL(pointsCount, 1, ());
+  return uTurn.m_atTheEnd && turnPoint == pointsCount - 1;
 }
 
 RouteWeight IndexGraph::CalculateEdgeWeight(EdgeEstimator::Purpose purpose, bool isOutgoing, Segment const & from,
@@ -542,28 +619,83 @@ RouteWeight IndexGraph::CalculateEdgeWeight(EdgeEstimator::Purpose purpose, bool
 {
   auto const & to_segment = isOutgoing ? to : from;
   auto const & from_segment = isOutgoing ? from : to;
-  auto const & to_road = GetRoadGeometry(to_segment.GetFeatureId());
-  auto const weight = RouteWeight(m_estimator->CalcSegmentWeight(to_segment, to_road, purpose));
+  double segWeight;
+  {
+    auto const & to_road = GetRoadGeometry(to_segment.GetFeatureId());
+    segWeight = m_estimator->CalcSegmentWeight(to_segment, to_road, purpose);
+  }
   auto const penalties = GetPenalties(purpose, isOutgoing ? from : to, isOutgoing ? to : from, prevWeight);
   auto const turn_penalty = getTurnPenalty(purpose, from_segment, to_segment);
-  return weight + penalties + turn_penalty;
+  return RouteWeight(segWeight) + penalties + turn_penalty;
+}
+
+RouteWeight IndexGraph::CalculateInternalEdgeWeight(EdgeEstimator::Purpose purpose, bool isOutgoing,
+                                                    Segment const & from, Segment const & to,
+                                                    std::optional<RouteWeight const> const & prevWeight,
+                                                    RoadGeometry const & road) const
+{
+  auto const & to_segment = isOutgoing ? to : from;
+  auto const & u = isOutgoing ? from : to;
+  auto const rp = u.GetRoadPoint(true /* front */);
+
+  auto const [rpAccessType, rpConfidence] =
+      prevWeight ? m_roadAccess.GetAccess(rp, *prevWeight) : m_roadAccess.GetAccessWithoutConditional(rp);
+  auto penalty = m_roadPenalty.GetPenalty(rp);
+  uint16_t penaltyTime = penalty ? penalty->m_timeSeconds : 0;
+
+  int8_t accessPenalty = 0;
+  int8_t accessConditionalPenalties = 0;
+  switch (rpConfidence)
+  {
+  case RoadAccess::Confidence::Sure:
+  {
+    if (rpAccessType != RoadAccess::Type::Yes)
+      accessPenalty = 1;
+    break;
+  }
+  case RoadAccess::Confidence::Maybe:
+  {
+    accessConditionalPenalties = 1;
+    break;
+  }
+  }
+
+  double const segWeight = m_estimator->CalcSegmentWeight(to_segment, road, purpose);
+  return {segWeight + penaltyTime, 0, accessPenalty, accessConditionalPenalties, 0.0};
 }
 
 RouteWeight IndexGraph::getTurnPenalty(EdgeEstimator::Purpose purpose, Segment const & from, Segment const & to) const
 {
   if (from.GetFeatureId() == to.GetFeatureId())
     return {0, 0, 0, 0, 0};
-  auto const & to_road = GetRoadGeometry(to.GetFeatureId());
-  auto const & from_road = GetRoadGeometry(from.GetFeatureId());
-  auto v1 = ms::ToVector(GetPoint(from, true)) - ms::ToVector(GetPoint(from, false));
-  auto v2 = ms::ToVector(GetPoint(to, true)) - ms::ToVector(GetPoint(to, false));
+
+  ms::LatLon pFromFront, pFromBack;
+  std::optional<HighwayType> fromHighway;
+  {
+    auto const & from_road = GetRoadGeometry(from.GetFeatureId());
+    pFromFront = from_road.GetPoint(from.GetPointId(true));
+    pFromBack = from_road.GetPoint(from.GetPointId(false));
+    fromHighway = from_road.GetHighwayType();
+  }
+
+  ms::LatLon pToFront, pToBack;
+  std::optional<HighwayType> toHighway;
+  {
+    auto const & to_road = GetRoadGeometry(to.GetFeatureId());
+    pToFront = to_road.GetPoint(to.GetPointId(true));
+    pToBack = to_road.GetPoint(to.GetPointId(false));
+    toHighway = to_road.GetHighwayType();
+  }
+
+  auto const v1 = ms::ToVector(pFromFront) - ms::ToVector(pFromBack);
+  auto const v2 = ms::ToVector(pToFront) - ms::ToVector(pToBack);
   auto const dotLen = v1.Length() * v2.Length();
   if (dotLen == 0)
     return {0, 0, 0, 0, 0};
-  auto normal = ms::ToVector(GetPoint(from, true)) + ms::ToVector(GetPoint(to, false));
+  auto normal = ms::ToVector(pFromFront) + ms::ToVector(pToBack);
   normal = normal / normal.Length();
   auto const signed_angle =
       math::RadToDeg(atan2(m3::DotProduct(m3::CrossProduct(v1, v2), normal), m3::DotProduct(v1, v2)));
-  return {m_estimator->GetTurnPenalty(purpose, signed_angle, from_road, to_road, m_isLeftHandTraffic), 0, 0, 0, 0};
+  return {m_estimator->GetTurnPenalty(purpose, signed_angle, fromHighway, toHighway, m_isLeftHandTraffic), 0, 0, 0, 0};
 }
 }  // namespace routing
