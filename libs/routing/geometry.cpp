@@ -22,6 +22,7 @@
 
 #include "defines.hpp"
 
+#include <atomic>
 #include <string>
 
 namespace routing
@@ -282,6 +283,14 @@ double RoadGeometry::GetRoadLengthM() const
 }
 
 // Geometry ----------------------------------------------------------------------------------------
+namespace
+{
+std::atomic<size_t> g_roadsCacheSize = kRoadsCacheSize;
+}  // namespace
+
+void SetRoadsCacheSize(size_t roadsCacheSize) { g_roadsCacheSize = std::max<size_t>(roadsCacheSize, 1); }
+size_t GetRoadsCacheSize() { return g_roadsCacheSize; }
+
 Geometry::Geometry(unique_ptr<GeometryLoader> loader, size_t roadsCacheSize) : m_loader(std::move(loader))
 {
   CHECK(m_loader, ());

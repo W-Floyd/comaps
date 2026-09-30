@@ -28,6 +28,10 @@ namespace routing
 // @TODO(bykoianko) Consider setting cache size based on available memory.
 // Maximum road geometry cache size in items.
 size_t constexpr kRoadsCacheSize = 10000;
+/// The cache size for Geometry objects created from now on (one per map region routed through);
+/// kRoadsCacheSize until set, e.g. from the device's memory.
+void SetRoadsCacheSize(size_t roadsCacheSize);
+size_t GetRoadsCacheSize();
 
 class RoadAttrsGetter;
 
@@ -134,7 +138,7 @@ public:
   Geometry() = default;
   /// \brief Geometry constructor
   /// \param roadsCacheSize in-memory geometry elements count limit
-  Geometry(std::unique_ptr<GeometryLoader> loader, size_t roadsCacheSize = kRoadsCacheSize);
+  Geometry(std::unique_ptr<GeometryLoader> loader, size_t roadsCacheSize = GetRoadsCacheSize());
 
   /// \note The reference returned by the method is valid until the next call of GetRoad()
   /// of GetPoint() methods.
