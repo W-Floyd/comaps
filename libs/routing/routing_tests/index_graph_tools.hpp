@@ -164,7 +164,9 @@ public:
                            EdgeEstimator::Purpose purpose) const override;
 
   double GetUTurnPenalty(Purpose purpose) const override;
-  double GetTurnPenalty(Purpose purpose, double angle, RoadGeometry const & from_road, RoadGeometry const & to_road,
+  double GetTurnPenalty(Purpose purpose, double angle,
+                        std::optional<HighwayType> const & fromHighway,
+                        std::optional<HighwayType> const & toHighway,
                         bool is_left_hand_traffic = false) const override;
   double GetFerryLandingPenalty(Purpose purpose) const override;
 

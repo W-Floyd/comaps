@@ -154,8 +154,10 @@ double WeightedEdgeEstimator::GetUTurnPenalty(Purpose purpose) const
 {
   return 0.0;
 }
-double WeightedEdgeEstimator::GetTurnPenalty(Purpose purpose, double angle, RoadGeometry const & from_road,
-                                             RoadGeometry const & to_road, bool is_left_hand_traffic) const
+double WeightedEdgeEstimator::GetTurnPenalty(Purpose /*purpose*/, double /*angle*/,
+                                             std::optional<HighwayType> const & /*fromHighway*/,
+                                             std::optional<HighwayType> const & /*toHighway*/,
+                                             bool /*is_left_hand_traffic*/) const
 {
   return 0;
 }

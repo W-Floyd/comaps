@@ -599,6 +599,12 @@ double EdgeEstimator::CalcOffroad(ms::LatLon const & from, ms::LatLon const & to
   return TimeBetweenSec(from, to, KmphToMps(offroadSpeedKMpH));
 }
 
+double EdgeEstimator::GetTurnPenalty(Purpose purpose, double angle, RoadGeometry const & from_road,
+                                     RoadGeometry const & to_road, bool is_left_hand_traffic) const
+{
+  return GetTurnPenalty(purpose, angle, from_road.GetHighwayType(), to_road.GetHighwayType(), is_left_hand_traffic);
+}
+
 // PedestrianEstimator -----------------------------------------------------------------------------
 class PedestrianEstimator final : public EdgeEstimator
 {
@@ -610,8 +616,10 @@ public:
   // EdgeEstimator overrides:
   double GetUTurnPenalty(Purpose /* purpose */) const override { return 0.0 /* seconds */; }
 
-  double GetTurnPenalty(Purpose purpose, double angle, RoadGeometry const & from_road, RoadGeometry const & to_road,
-                        bool is_left_hand_traffic = false) const override
+  double GetTurnPenalty(Purpose /* purpose */, double /* angle */,
+                        std::optional<HighwayType> const & /* fromHighway */,
+                        std::optional<HighwayType> const & /* toHighway */,
+                        bool /* is_left_hand_traffic */ = false) const override
   {
     return 0;
   }
@@ -645,7 +653,9 @@ public:
   // EdgeEstimator overrides:
   double GetUTurnPenalty(Purpose /* purpose */) const override { return 20.0 /* seconds */; }
 
-  double GetTurnPenalty(Purpose purpose, double angle, RoadGeometry const & from_road, RoadGeometry const & to_road,
+  double GetTurnPenalty(Purpose purpose, double angle,
+                        std::optional<HighwayType> const & fromHighway,
+                        std::optional<HighwayType> const & toHighway,
                         bool is_left_hand_traffic = false) const override;
 
   double GetFerryLandingPenalty(Purpose purpose) const override
@@ -693,15 +703,17 @@ public:
   }
 };
 
-double BicycleEstimator::GetTurnPenalty(Purpose purpose, double angle, RoadGeometry const & from_road,
-                                        RoadGeometry const & to_road, bool is_left_hand_traffic) const
+double BicycleEstimator::GetTurnPenalty(Purpose purpose, double angle,
+                                        std::optional<HighwayType> const & fromHighway,
+                                        std::optional<HighwayType> const & toHighway,
+                                        bool is_left_hand_traffic) const
 {
   auto penalty = m_defaultPenalty;
 
-  if (from_road.GetHighwayType().has_value() && to_road.GetHighwayType().has_value())
+  if (fromHighway.has_value() && toHighway.has_value())
   {
-    int const from_road_idx = static_cast<int>(from_road.GetHighwayType().value());
-    int const to_road_idx = static_cast<int>(to_road.GetHighwayType().value());
+    int const from_road_idx = static_cast<int>(fromHighway.value());
+    int const to_road_idx = static_cast<int>(toHighway.value());
     auto const pen = m_turnPenaltyMap.find(from_road_idx * 65535 + to_road_idx);
     if (pen != m_turnPenaltyMap.end())
       penalty = pen->second;
@@ -735,7 +747,9 @@ public:
   // EdgeEstimator overrides:
   double CalcSegmentWeight(Segment const & segment, RoadGeometry const & road, Purpose purpose) const override;
   double GetUTurnPenalty(Purpose /* purpose */) const override;
-  double GetTurnPenalty(Purpose purpose, double angle, RoadGeometry const & from_road, RoadGeometry const & to_road,
+  double GetTurnPenalty(Purpose purpose, double angle,
+                        std::optional<HighwayType> const & fromHighway,
+                        std::optional<HighwayType> const & toHighway,
                         bool is_left_hand_traffic = false) const override;
   double GetFerryLandingPenalty(Purpose purpose) const override
   {
@@ -759,15 +773,17 @@ double CarEstimator::GetUTurnPenalty(Purpose /* purpose */) const
   return 2 * 60;  // seconds
 }
 
-double CarEstimator::GetTurnPenalty(Purpose purpose, double angle, RoadGeometry const & from_road,
-                                    RoadGeometry const & to_road, bool is_left_hand_traffic) const
+double CarEstimator::GetTurnPenalty(Purpose purpose, double angle,
+                                    std::optional<HighwayType> const & fromHighway,
+                                    std::optional<HighwayType> const & toHighway,
+                                    bool is_left_hand_traffic) const
 {
   auto penalty = m_defaultPenalty;
 
-  if (from_road.GetHighwayType().has_value() && to_road.GetHighwayType().has_value())
+  if (fromHighway.has_value() && toHighway.has_value())
   {
-    int const from_road_idx = static_cast<int>(from_road.GetHighwayType().value());
-    int const to_road_idx = static_cast<int>(to_road.GetHighwayType().value());
+    int const from_road_idx = static_cast<int>(fromHighway.value());
+    int const to_road_idx = static_cast<int>(toHighway.value());
     auto const pen = m_turnPenaltyMap.find(from_road_idx * 65535 + to_road_idx);
     if (pen != m_turnPenaltyMap.end())
       penalty = pen->second;

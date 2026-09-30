@@ -9,6 +9,7 @@
 #include "geometry/point_with_altitude.hpp"
 
 #include <memory>
+#include <optional>
 
 #include "3party/ankerl/unordered_dense.h"
 
@@ -49,8 +50,12 @@ public:
 
   virtual double CalcSegmentWeight(Segment const & segment, RoadGeometry const & road, Purpose purpose) const = 0;
   virtual double GetUTurnPenalty(Purpose purpose) const = 0;
+  virtual double GetTurnPenalty(Purpose purpose, double angle,
+                                std::optional<HighwayType> const & fromHighway,
+                                std::optional<HighwayType> const & toHighway,
+                                bool is_left_hand_traffic = false) const = 0;
   virtual double GetTurnPenalty(Purpose purpose, double angle, RoadGeometry const & from_road,
-                                RoadGeometry const & to_road, bool is_left_hand_traffic = false) const = 0;
+                                RoadGeometry const & to_road, bool is_left_hand_traffic = false) const;
   virtual double GetFerryLandingPenalty(Purpose purpose) const = 0;
 
   static std::shared_ptr<EdgeEstimator> Create(VehicleType vehicleType, double maxWeighSpeedKMpH,
