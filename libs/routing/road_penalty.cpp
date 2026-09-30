@@ -13,13 +13,7 @@ std::string const kNames[] = {"None", "SmallCalming",         "MediumCalming",  
                               "Gate", "UncontrolledJunction", "ControlledJunction", "Count"};
 }  // namespace penalty_impl
 
-std::optional<RoadPenalty::Penalty> RoadPenalty::GetPenalty(RoadPoint const & point) const
-{
-  auto const it = m_pointToPenalty.find(point);
-  if (it != m_pointToPenalty.end())
-    return it->second;
-  return {};
-}
+
 
 bool RoadPenalty::operator==(RoadPenalty const & rhs) const
 {

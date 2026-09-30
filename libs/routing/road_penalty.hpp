@@ -108,7 +108,15 @@ public:
 
   PointToPenalty const & GetPointToPenalty() const { return m_pointToPenalty; }
 
-  std::optional<Penalty> GetPenalty(RoadPoint const & point) const;
+  std::optional<Penalty> GetPenalty(RoadPoint const & point) const
+  {
+    if (m_pointToPenalty.empty())
+      return {};
+    auto const it = m_pointToPenalty.find(point);
+    if (it != m_pointToPenalty.end())
+      return it->second;
+    return {};
+  }
 
   void SetPointPenalties(PointToPenalty && penalties) { m_pointToPenalty = std::move(penalties); }
 

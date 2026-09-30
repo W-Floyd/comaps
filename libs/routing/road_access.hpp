@@ -9,9 +9,10 @@
 #include "3party/opening_hours/opening_hours.hpp"
 #include "3party/skarupke/flat_hash_map.hpp"
 
+#include "routing/route_weight.hpp"
+
 namespace routing
 {
-class RouteWeight;
 
 // This class provides information about road access classes.
 // One instance of RoadAccess holds information about one
@@ -105,11 +106,41 @@ public:
 
   PointToAccessConditional const & GetPointToAccessConditional() const { return m_pointToAccessConditional; }
 
-  std::pair<Type, Confidence> GetAccess(uint32_t featureId, RouteWeight const & weightToFeature) const;
-  std::pair<Type, Confidence> GetAccess(RoadPoint const & point, RouteWeight const & weightToPoint) const;
+  std::pair<Type, Confidence> GetAccess(uint32_t featureId, RouteWeight const & weightToFeature) const
+  {
+    if (!m_wayToAccessConditional.empty())
+      return GetAccessConditional(featureId, weightToFeature.GetWeight());
+    return GetAccessWithoutConditional(featureId);
+  }
 
-  std::pair<Type, Confidence> GetAccessWithoutConditional(uint32_t featureId) const;
-  std::pair<Type, Confidence> GetAccessWithoutConditional(RoadPoint const & point) const;
+  std::pair<Type, Confidence> GetAccess(RoadPoint const & point, RouteWeight const & weightToPoint) const
+  {
+    if (!m_pointToAccessConditional.empty())
+      return GetAccessConditional(point, weightToPoint.GetWeight());
+    return GetAccessWithoutConditional(point);
+  }
+
+  std::pair<Type, Confidence> GetAccessWithoutConditional(uint32_t featureId) const
+  {
+    if (!m_wayToAccess.empty())
+    {
+      auto const it = m_wayToAccess.find(featureId);
+      if (it != m_wayToAccess.cend())
+        return {it->second, Confidence::Sure};
+    }
+    return {Type::Yes, Confidence::Sure};
+  }
+
+  std::pair<Type, Confidence> GetAccessWithoutConditional(RoadPoint const & point) const
+  {
+    if (!m_pointToAccess.empty())
+    {
+      auto const it = m_pointToAccess.find(point);
+      if (it != m_pointToAccess.cend())
+        return {it->second, Confidence::Sure};
+    }
+    return {Type::Yes, Confidence::Sure};
+  }
 
   void SetWayAccess(WayToAccess && access, WayToAccessConditional && condAccess)
   {
@@ -160,8 +191,8 @@ private:
   static std::optional<Confidence> GetConfidenceForAccessConditional(time_t momentInTime,
                                                                      osmoh::OpeningHours const & openingHours);
 
-  std::pair<Type, Confidence> GetAccess(uint32_t featureId, double weight) const;
-  std::pair<Type, Confidence> GetAccess(RoadPoint const & point, double weight) const;
+  std::pair<Type, Confidence> GetAccessConditional(uint32_t featureId, double weight) const;
+  std::pair<Type, Confidence> GetAccessConditional(RoadPoint const & point, double weight) const;
 
   std::function<time_t()> m_currentTimeGetter;
 

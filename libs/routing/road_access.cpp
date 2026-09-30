@@ -35,19 +35,7 @@ std::string DebugPrintKV(KV const & kvs, size_t maxKVToShow)
  */
 RoadAccess::RoadAccess() : m_currentTimeGetter([]() { return GetCurrentTimestamp(); }) {}
 
-std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccess(uint32_t featureId,
-                                                                          RouteWeight const & weightToFeature) const
-{
-  return GetAccess(featureId, weightToFeature.GetWeight());
-}
-
-std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccess(RoadPoint const & point,
-                                                                          RouteWeight const & weightToPoint) const
-{
-  return GetAccess(point, weightToPoint.GetWeight());
-}
-
-std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccess(uint32_t featureId, double weight) const
+std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccessConditional(uint32_t featureId, double weight) const
 {
   auto const itConditional = m_wayToAccessConditional.find(featureId);
   if (itConditional != m_wayToAccessConditional.cend())
@@ -65,7 +53,7 @@ std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccess(uint32
   return GetAccessWithoutConditional(featureId);
 }
 
-std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccess(RoadPoint const & point, double weight) const
+std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccessConditional(RoadPoint const & point, double weight) const
 {
   auto const itConditional = m_pointToAccessConditional.find(point);
   if (itConditional != m_pointToAccessConditional.cend())
@@ -81,27 +69,6 @@ std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccess(RoadPo
   }
 
   return GetAccessWithoutConditional(point);
-}
-
-std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccessWithoutConditional(uint32_t featureId) const
-{
-  // todo(@m) This may or may not be too slow. Consider profiling this and using
-  // a Bloom filter or anything else that is faster than ska::flat_hash_map
-  auto const it = m_wayToAccess.find(featureId);
-  if (it != m_wayToAccess.cend())
-    return {it->second, Confidence::Sure};
-
-  return {Type::Yes, Confidence::Sure};
-}
-
-std::pair<RoadAccess::Type, RoadAccess::Confidence> RoadAccess::GetAccessWithoutConditional(
-    RoadPoint const & point) const
-{
-  auto const it = m_pointToAccess.find(point);
-  if (it != m_pointToAccess.cend())
-    return {it->second, Confidence::Sure};
-
-  return {Type::Yes, Confidence::Sure};
 }
 
 bool RoadAccess::operator==(RoadAccess const & rhs) const

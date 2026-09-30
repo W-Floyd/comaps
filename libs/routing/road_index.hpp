@@ -121,6 +121,12 @@ public:
 
   bool IsRoad(uint32_t featureId) const { return m_roads.count(featureId) != 0; }
 
+  RoadJointIds const * FindRoad(uint32_t featureId) const
+  {
+    auto const it = m_roads.find(featureId);
+    return it != m_roads.end() ? &it->second : nullptr;
+  }
+
   RoadJointIds const & GetRoad(uint32_t featureId) const
   {
     auto const & it = m_roads.find(featureId);
