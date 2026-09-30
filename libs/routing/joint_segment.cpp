@@ -2,7 +2,7 @@
 
 #include "base/assert.hpp"
 
-#include "std/boost_container_hash.hpp"
+
 
 #include <sstream>
 
@@ -72,29 +72,6 @@ Segment JointSegment::GetSegment(bool start) const
   return {m_numMwmId, m_featureId, start ? m_startSegmentId : m_endSegmentId, m_forward};
 }
 
-bool JointSegment::operator<(JointSegment const & rhs) const
-{
-  if (m_featureId != rhs.m_featureId)
-    return m_featureId < rhs.m_featureId;
-
-  if (m_forward != rhs.m_forward)
-    return m_forward < rhs.m_forward;
-
-  if (m_startSegmentId != rhs.m_startSegmentId)
-    return m_startSegmentId < rhs.m_startSegmentId;
-
-  if (m_endSegmentId != rhs.m_endSegmentId)
-    return m_endSegmentId < rhs.m_endSegmentId;
-
-  return m_numMwmId < rhs.m_numMwmId;
-}
-
-bool JointSegment::operator==(JointSegment const & rhs) const
-{
-  return m_featureId == rhs.m_featureId && m_forward == rhs.m_forward && m_startSegmentId == rhs.m_startSegmentId &&
-         m_endSegmentId == rhs.m_endSegmentId && m_numMwmId == rhs.m_numMwmId;
-}
-
 std::string DebugPrint(JointSegment const & jointSegment)
 {
   std::ostringstream out;
@@ -107,17 +84,3 @@ std::string DebugPrint(JointSegment const & jointSegment)
   return out.str();
 }
 }  // namespace routing
-
-namespace std
-{
-size_t std::hash<routing::JointSegment>::operator()(routing::JointSegment const & jointSegment) const
-{
-  size_t seed = 0;
-  boost::hash_combine(seed, jointSegment.GetMwmId());
-  boost::hash_combine(seed, jointSegment.GetFeatureId());
-  boost::hash_combine(seed, jointSegment.GetStartSegmentId());
-  boost::hash_combine(seed, jointSegment.GetEndSegmentId());
-  boost::hash_combine(seed, jointSegment.IsForward());
-  return seed;
-}
-}  // namespace std

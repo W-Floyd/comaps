@@ -35,8 +35,26 @@ public:
 
   Segment GetSegment(bool start) const;
 
-  bool operator<(JointSegment const & rhs) const;
-  bool operator==(JointSegment const & rhs) const;
+  bool operator<(JointSegment const & rhs) const
+  {
+    if (m_featureId != rhs.m_featureId)
+      return m_featureId < rhs.m_featureId;
+    if (m_forward != rhs.m_forward)
+      return m_forward < rhs.m_forward;
+    if (m_startSegmentId != rhs.m_startSegmentId)
+      return m_startSegmentId < rhs.m_startSegmentId;
+    if (m_endSegmentId != rhs.m_endSegmentId)
+      return m_endSegmentId < rhs.m_endSegmentId;
+    return m_numMwmId < rhs.m_numMwmId;
+  }
+
+  bool operator==(JointSegment const & rhs) const
+  {
+    return m_featureId == rhs.m_featureId && m_startSegmentId == rhs.m_startSegmentId &&
+           m_endSegmentId == rhs.m_endSegmentId && m_numMwmId == rhs.m_numMwmId &&
+           m_forward == rhs.m_forward;
+  }
+
   bool operator!=(JointSegment const & rhs) const { return !(*this == rhs); }
 
 private:
@@ -73,6 +91,18 @@ namespace std
 template <>
 struct hash<routing::JointSegment>
 {
-  size_t operator()(routing::JointSegment const & jointSegment) const;
+  size_t operator()(routing::JointSegment const & js) const noexcept
+  {
+    uint64_t const w1 = (static_cast<uint64_t>(js.GetFeatureId()) << 32) | js.GetStartSegmentId();
+    uint64_t const w2 = (static_cast<uint64_t>(js.GetEndSegmentId()) << 32) |
+                        (static_cast<uint64_t>(js.GetMwmId()) << 1) | (js.IsForward() ? 1ULL : 0ULL);
+    uint64_t h = w1 ^ (w2 * 0x9e3779b97f4a7c15ULL);
+    h ^= h >> 30;
+    h *= 0xbf58476d1ce4e5b9ULL;
+    h ^= h >> 27;
+    h *= 0x94d049bb133111ebULL;
+    h ^= h >> 31;
+    return static_cast<size_t>(h);
+  }
 };
 }  // namespace std

@@ -37,12 +37,15 @@ public:
 
   struct Hash
   {
-    size_t operator()(RoadPoint const & roadPoint) const
+    size_t operator()(RoadPoint const & roadPoint) const noexcept
     {
-      size_t seed = 0;
-      boost::hash_combine(seed, roadPoint.m_featureId);
-      boost::hash_combine(seed, roadPoint.m_pointId);
-      return seed;
+      uint64_t key = (static_cast<uint64_t>(roadPoint.m_featureId) << 32) | roadPoint.m_pointId;
+      key ^= key >> 30;
+      key *= 0xbf58476d1ce4e5b9ULL;
+      key ^= key >> 27;
+      key *= 0x94d049bb133111ebULL;
+      key ^= key >> 31;
+      return static_cast<size_t>(key);
     }
   };
 
