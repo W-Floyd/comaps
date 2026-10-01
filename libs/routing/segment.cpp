@@ -9,11 +9,6 @@
 namespace routing
 {
 // Segment -----------------------------------------------------------------------------------------
-uint32_t Segment::GetPointId(bool front) const
-{
-  return m_forward == front ? m_segmentIdx + 1 : m_segmentIdx;
-}
-
 bool Segment::operator<(Segment const & seg) const
 {
   if (m_featureId != seg.m_featureId)
@@ -26,18 +21,6 @@ bool Segment::operator<(Segment const & seg) const
     return m_mwmId < seg.m_mwmId;
 
   return m_forward < seg.m_forward;
-}
-
-bool Segment::operator==(Segment const & seg) const
-{
-  return m_featureId == seg.m_featureId && m_segmentIdx == seg.m_segmentIdx && m_mwmId == seg.m_mwmId &&
-         m_forward == seg.m_forward;
-}
-
-bool Segment::IsInverse(Segment const & seg) const
-{
-  return m_featureId == seg.m_featureId && m_segmentIdx == seg.m_segmentIdx && m_mwmId == seg.m_mwmId &&
-         m_forward != seg.m_forward;
 }
 
 bool Segment::IsFakeCreated() const

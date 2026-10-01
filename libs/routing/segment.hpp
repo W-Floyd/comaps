@@ -35,7 +35,7 @@ public:
   uint32_t GetSegmentIdx() const { return m_segmentIdx; }
   bool IsForward() const { return m_forward; }
 
-  uint32_t GetPointId(bool front) const;
+  uint32_t GetPointId(bool front) const { return m_forward == front ? m_segmentIdx + 1 : m_segmentIdx; }
 
   uint32_t GetMinPointId() const { return m_segmentIdx; }
   uint32_t GetMaxPointId() const { return m_segmentIdx + 1; }
@@ -43,10 +43,18 @@ public:
   RoadPoint GetRoadPoint(bool front) const { return RoadPoint(m_featureId, GetPointId(front)); }
 
   bool operator<(Segment const & seg) const;
-  bool operator==(Segment const & seg) const;
+  bool operator==(Segment const & seg) const
+  {
+    return m_featureId == seg.m_featureId && m_segmentIdx == seg.m_segmentIdx && m_mwmId == seg.m_mwmId &&
+           m_forward == seg.m_forward;
+  }
   bool operator!=(Segment const & seg) const { return !(*this == seg); }
 
-  bool IsInverse(Segment const & seg) const;
+  bool IsInverse(Segment const & seg) const
+  {
+    return m_featureId == seg.m_featureId && m_segmentIdx == seg.m_segmentIdx && m_mwmId == seg.m_mwmId &&
+           m_forward != seg.m_forward;
+  }
   Segment GetReversed() const { return {m_mwmId, m_featureId, m_segmentIdx, !m_forward}; }
 
   /// @todo Logically, these functions should be equal, but keep existing logic,

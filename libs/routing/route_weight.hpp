@@ -34,8 +34,34 @@ public:
   int8_t GetNumPassThroughChanges() const { return m_numPassThroughChanges; }
   double GetTransitTime() const { return m_transitTime; }
 
-  double GetIntegratedWeight() const;
-  bool operator<(RouteWeight const & rhs) const;
+  double GetIntegratedWeight() const
+  {
+    double res = m_weight;
+    if (m_numPassThroughChanges)
+      res += m_numPassThroughChanges * s_PassThroughPenaltyS;
+    if (m_numAccessChanges)
+      res += m_numAccessChanges * s_AccessPenaltyS;
+    if (m_numAccessConditionalPenalties)
+      res += m_numAccessConditionalPenalties * (s_AccessPenaltyS / 2);
+    return res;
+  }
+
+  bool operator<(RouteWeight const & rhs) const
+  {
+    if ((m_numPassThroughChanges | m_numAccessChanges | m_numAccessConditionalPenalties) == 0 &&
+        (rhs.m_numPassThroughChanges | rhs.m_numAccessChanges | rhs.m_numAccessConditionalPenalties) == 0)
+    {
+      if (m_weight != rhs.m_weight)
+        return m_weight < rhs.m_weight;
+      return m_transitTime > rhs.m_transitTime;
+    }
+
+    auto const w1 = GetIntegratedWeight();
+    auto const w2 = rhs.GetIntegratedWeight();
+    if (w1 != w2)
+      return w1 < w2;
+    return m_transitTime > rhs.m_transitTime;
+  }
 
   bool operator==(RouteWeight const & rhs) const { return !((*this) < rhs) && !(rhs < (*this)); }
 
@@ -47,11 +73,33 @@ public:
 
   bool operator<=(RouteWeight const & rhs) const { return rhs >= (*this); }
 
-  RouteWeight operator+(RouteWeight const & rhs) const;
+  RouteWeight operator+(RouteWeight const & rhs) const
+  {
+    return RouteWeight(m_weight + rhs.m_weight,
+                       static_cast<int8_t>(m_numPassThroughChanges + rhs.m_numPassThroughChanges),
+                       static_cast<int8_t>(m_numAccessChanges + rhs.m_numAccessChanges),
+                       static_cast<int8_t>(m_numAccessConditionalPenalties + rhs.m_numAccessConditionalPenalties),
+                       m_transitTime + rhs.m_transitTime);
+  }
 
-  RouteWeight operator-(RouteWeight const & rhs) const;
+  RouteWeight operator-(RouteWeight const & rhs) const
+  {
+    return RouteWeight(m_weight - rhs.m_weight,
+                       static_cast<int8_t>(m_numPassThroughChanges - rhs.m_numPassThroughChanges),
+                       static_cast<int8_t>(m_numAccessChanges - rhs.m_numAccessChanges),
+                       static_cast<int8_t>(m_numAccessConditionalPenalties - rhs.m_numAccessConditionalPenalties),
+                       m_transitTime - rhs.m_transitTime);
+  }
 
-  RouteWeight & operator+=(RouteWeight const & rhs);
+  RouteWeight & operator+=(RouteWeight const & rhs)
+  {
+    m_weight += rhs.m_weight;
+    m_numPassThroughChanges = static_cast<int8_t>(m_numPassThroughChanges + rhs.m_numPassThroughChanges);
+    m_numAccessChanges = static_cast<int8_t>(m_numAccessChanges + rhs.m_numAccessChanges);
+    m_numAccessConditionalPenalties = static_cast<int8_t>(m_numAccessConditionalPenalties + rhs.m_numAccessConditionalPenalties);
+    m_transitTime += rhs.m_transitTime;
+    return *this;
+  }
 
   RouteWeight operator-() const
   {
